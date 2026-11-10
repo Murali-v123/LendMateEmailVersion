@@ -1,0 +1,87 @@
+# ============================================================
+# .gitignore — LendMate
+# ============================================================
+
+# --- Secrets and environment files ---
+.env
+.env.*
+!.env.example
+*.env.production
+*.env.local
+*.env.staging
+
+# --- Python cache ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+.Python
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+pip-selfcheck.json
+
+# --- Django ---
+staticfiles/
+
+# --- Database dumps and archives (contain personal data; never commit) ---
+*.sql
+*.sql.gz
+*.dump
+*.zip
+backups/
+media/
+*.sqlite3
+db.sqlite3
+
+# --- Celery ---
+celerybeat-schedule
+celerybeat-schedule.*
+*.pid
+
+# --- Logs ---
+*.log
+logs/
+
+# --- IDE and editor files ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Test and coverage artifacts ---
+.coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+*.cover
+.tox/
+
+# --- Build and release artifacts ---
+dist/
+build/
+*.egg-info/
+*.egg
+*.whl
+*.zip
+*.tar.gz
+release/
+
+# --- Node / frontend tooling ---
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# --- Local database backups ---
+backups/
+*.sql.gz
+
+# --- Docker ---
+.dockerignore

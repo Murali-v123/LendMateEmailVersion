@@ -1,0 +1,145 @@
+# Docker Compose for LendMate: local development and self-hosted deployment.
+#
+# SECURITY REQUIREMENTS before first run:
+#   cp .env.example .env     # then fill in EVERY variable marked <required>
+#   docker compose up --build
+#
+# PostgreSQL and Redis are intentionally NOT exposed to the host network.
+# Only the web service (port 8000) is reachable from outside the stack.
+#
+# The required-variable syntax (${VAR:?message}) makes Compose stop immediately
+# if a secret is missing or empty.  There are no default passwords.
+
+x-app-env: &app-env
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  REDIS_URL: "redis://redis:6379/0"
+  CELERY_BROKER_URL: "redis://redis:6379/0"
+  CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+
+x-app-build: &app-build
+  image: lendmate:latest
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       "${POSTGRES_DB:-lendmate}"
+      POSTGRES_USER:     "${POSTGRES_USER:-lendmate}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set; do not use a default}"
+    # NO public port mapping: PostgreSQL is reachable only inside the Docker network.
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lendmate} -d ${POSTGRES_DB:-lendmate}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Redis (Celery broker, result backend, login throttling cache)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # NO public port mapping: Redis is reachable only inside the Docker network.
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Django web application (Gunicorn). One image serves web, worker, beat and migrate.
+  # ---------------------------------------------------------------------------
+  web:
+    <<: *app-build
+    command: >
+      gunicorn config.wsgi:application
+        --bind 0.0.0.0:8000
+        --workers 3
+        --timeout 120
+        --access-logfile -
+        --error-logfile -
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ---------------------------------------------------------------------------
+  # Migration runner: runs once and exits. Run with: docker compose run --rm migrate
+  # ---------------------------------------------------------------------------
+  migrate:
+    <<: *app-build
+    command: python manage.py migrate --noinput
+    env_file: .env
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Celery worker
+  # ---------------------------------------------------------------------------
+  celery-worker:
+    <<: *app-build
+    command: >
+      celery -A config worker
+        --loglevel=info
+        --concurrency=2
+    restart: unless-stopped
+    env_file: .env
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Celery beat scheduler.
+  # WARNING: run exactly ONE beat instance. Two beats send every reminder twice.
+  # ---------------------------------------------------------------------------
+  celery-beat:
+    <<: *app-build
+    command: >
+      celery -A config beat
+        --loglevel=info
+    restart: unless-stopped
+    env_file: .env
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

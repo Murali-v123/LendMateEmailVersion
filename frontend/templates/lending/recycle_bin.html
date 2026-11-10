@@ -1,0 +1,64 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Recycle bin · LendMate{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0">
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+        <div>
+            <p class="lm-eyebrow mb-1">Management</p>
+            <h1 class="lm-display mb-1">Recycle bin</h1>
+            <p class="lm-muted mb-0">
+                Deleted borrowers are kept here. Restore them, or delete them permanently once they have no loan records.
+            </p>
+        </div>
+        <a href="{% url 'lending:borrower_list' %}" class="lm-btn-outline">Back to Borrowers</a>
+    </div>
+
+    <div class="lm-card p-0 overflow-hidden">
+        {% if borrowers %}
+        <div class="table-responsive">
+            <table class="table mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th scope="col">Borrower</th>
+                        <th scope="col">Email</th>
+                        <th scope="col">Loans</th>
+                        <th scope="col">Deleted</th>
+                        <th scope="col" class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for borrower in borrowers %}
+                    <tr>
+                        <td>{{ borrower.full_name }}</td>
+                        <td>{{ borrower.email|default:"—" }}</td>
+                        <td>{{ borrower.loan_count }}</td>
+                        <td>{{ borrower.deleted_at|date:"d M Y, H:i" }}</td>
+                        <td class="text-end">
+                            <form method="post" action="{% url 'lending:restore_borrower' borrower.pk %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="lm-btn-outline btn-sm">Restore</button>
+                            </form>
+                            <form method="post" action="{% url 'lending:purge_borrower' borrower.pk %}" class="d-inline"
+                                  onsubmit="return confirm('Permanently delete {{ borrower.full_name|escapejs }}? This cannot be undone.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger"{% if borrower.loan_count %} disabled title="Has loan records"{% endif %}>Delete forever</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="lm-empty py-5 text-center">
+            <h5 class="lm-heading-sm mb-2">The recycle bin is empty</h5>
+            <p class="lm-muted mb-0">Borrowers you delete will appear here.</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}
